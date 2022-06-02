@@ -8,23 +8,20 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-type Config struct {
-	Hosts  map[string]HostConfig `yaml:"hosts"`
-	Groups map[string]HostConfig `yaml:"groups"`
-}
 
 type SafeConfig struct {
 	sync.RWMutex
-	C *Config
+	C *HostConfig
 }
 
 type HostConfig struct {
+	Host string `yaml:"host"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 }
 
 func (sc *SafeConfig) ReloadConfig(configFile string) error {
-	var c = &Config{}
+	var c = &HostConfig{}
 
 	yamlFile, err := ioutil.ReadFile(configFile)
 	if err != nil {
@@ -41,31 +38,16 @@ func (sc *SafeConfig) ReloadConfig(configFile string) error {
 	return nil
 }
 
-func (sc *SafeConfig) HostConfigForTarget(target string) (*HostConfig, error) {
+func (sc *SafeConfig) HostConfig() (*HostConfig, error) {
 	sc.Lock()
 	defer sc.Unlock()
-	if hostConfig, ok := sc.C.Hosts[target]; ok {
-		return &HostConfig{
-			Username: hostConfig.Username,
-			Password: hostConfig.Password,
-		}, nil
-	}
-	if hostConfig, ok := sc.C.Hosts["default"]; ok {
-		return &HostConfig{
-			Username: hostConfig.Username,
-			Password: hostConfig.Password,
-		}, nil
-	}
-	return &HostConfig{}, fmt.Errorf("no credentials found for target %s", target)
-}
 
-// HostConfigForGroup checks the configuration for a matching group config and returns the configured HostConfig for
-// that matched group.
-func (sc *SafeConfig) HostConfigForGroup(group string) (*HostConfig, error) {
-	sc.Lock()
-	defer sc.Unlock()
-	if hostConfig, ok := sc.C.Groups[group]; ok {
-		return &hostConfig, nil
+	if hostConfig := sc.C; hostConfig != nil {
+		return &HostConfig{
+			Host: hostConfig.Host,
+			Username: hostConfig.Username,
+			Password: hostConfig.Password,
+		}, nil
 	}
-	return &HostConfig{}, fmt.Errorf("no credentials found for group %s", group)
+	return &HostConfig{}, fmt.Errorf("no credentials found")
 }

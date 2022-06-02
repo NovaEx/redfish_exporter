@@ -36,7 +36,7 @@ var (
 		"Address to listen on for web interface and telemetry.",
 	).Default(":9610").String()
 	sc = &SafeConfig{
-		C: &Config{},
+		C: &HostConfig{},
 	}
 	reloadCh chan chan error
 )
@@ -73,40 +73,23 @@ func reloadHandler(configLoggerCtx *alog.Entry) http.HandlerFunc {
 func metricsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		registry := prometheus.NewRegistry()
-		target := r.URL.Query().Get("target")
-		if target == "" {
-			http.Error(w, "'target' parameter must be specified", 400)
-			return
-		}
-		targetLoggerCtx := rootLoggerCtx.WithField("target", target)
-		targetLoggerCtx.Info("scraping target host")
-
+		
 		var (
 			hostConfig *HostConfig
 			err        error
-			ok         bool
-			group      []string
 		)
-
-		group, ok = r.URL.Query()["group"]
-
-		if ok && len(group[0]) >= 1 {
-			// Trying to get hostConfig from group.
-			if hostConfig, err = sc.HostConfigForGroup(group[0]); err != nil {
-				targetLoggerCtx.WithError(err).Error("error getting credentials")
-				return
-			}
-		}
-
+		targetLoggerCtx := rootLoggerCtx
+		targetLoggerCtx.Info("scraping target host")
+		
 		// Always falling back to single host config when group config failed.
-		if hostConfig == nil {
-			if hostConfig, err = sc.HostConfigForTarget(target); err != nil {
-				targetLoggerCtx.WithError(err).Error("error getting credentials")
-				return
-			}
+		if hostConfig, err = sc.HostConfig(); err != nil {
+			targetLoggerCtx.WithError(err).Error("error getting credentials")
+			return
 		}
+		
+		
 
-		collector := collector.NewRedfishCollector(target, hostConfig.Username, hostConfig.Password, targetLoggerCtx)
+		collector := collector.NewRedfishCollector(hostConfig.Host, hostConfig.Username, hostConfig.Password, targetLoggerCtx)
 		registry.MustRegister(collector)
 		gatherers := prometheus.Gatherers{
 			prometheus.DefaultGatherer,
@@ -172,11 +155,7 @@ func main() {
             </head>
 						<body>
             <h1>redfish Exporter</h1>
-            <form action="/redfish">
-            <label>Target:</label> <input type="text" name="target" placeholder="X.X.X.X" value="1.2.3.4"><br>
-            <label>Group:</label> <input type="text" name="group" placeholder="group (optional)" value=""><br>
-            <input type="submit" value="Submit">
-						</form>
+						<p><a href="/redfish">Redfish metrics</a></p>
 						<p><a href="/metrics">Local metrics</a></p>
             </body>
             </html>`))
